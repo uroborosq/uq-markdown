@@ -16,6 +16,10 @@ import elkLayouts from '@mermaid-js/layout-elk';
 mermaid.registerLayoutLoaders(elkLayouts);
 
 let currentTheme = 'default';
+// User-supplied mermaid config (from the plugin's `mermaid_config` file). Its
+// keys override the defaults below; if it sets `theme`, that wins over the
+// nvim-derived theme.
+let userMermaidConfig = {};
 function initMermaid(theme) {
   currentTheme = theme === 'dark' ? 'dark' : 'default';
   mermaid.initialize({
@@ -24,6 +28,7 @@ function initMermaid(theme) {
     layout: 'elk', // default everything to ELK; frontmatter can override.
     theme: currentTheme,
     flowchart: { defaultRenderer: 'elk' },
+    ...userMermaidConfig,
   });
 }
 initMermaid('default');
@@ -152,7 +157,10 @@ let renderToken = 0;
 async function render(update) {
   currentDir = update.dir || null;
   const theme = update.theme || 'default';
-  if ((theme === 'dark' ? 'dark' : 'default') !== currentTheme) initMermaid(theme);
+  const nextUserConfig = update.mermaid_config || {};
+  const configChanged = JSON.stringify(nextUserConfig) !== JSON.stringify(userMermaidConfig);
+  if (configChanged) userMermaidConfig = nextUserConfig;
+  if (configChanged || (theme === 'dark' ? 'dark' : 'default') !== currentTheme) initMermaid(theme);
   document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
 
   const token = ++renderToken;

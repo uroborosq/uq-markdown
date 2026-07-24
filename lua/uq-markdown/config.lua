@@ -13,6 +13,11 @@ M.defaults = {
   user_data_dir = vim.fn.stdpath('cache') .. '/uq-markdown-profile',
   -- 'auto' follows &background; or force 'light' / 'dark'.
   theme = 'auto',
+  -- Path to a mermaid config JSON file (same shape as mermaid CLI's `-c`).
+  -- Its keys are merged into `mermaid.initialize`, overriding the plugin
+  -- defaults (except the theme, which keeps following `theme` above unless the
+  -- file sets `theme` explicitly). `nil` disables it.
+  mermaid_config = nil,
   -- node binary.
   node = 'node',
   -- Filetypes considered "markdown" for buffer-following behaviour.

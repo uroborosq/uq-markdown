@@ -26,6 +26,42 @@ local function resolve_theme()
   return vim.o.background == 'dark' and 'dark' or 'light'
 end
 
+-- Read+parse the mermaid config file, caching by (path, mtime) so we re-read it
+-- when it changes on disk without paying the cost on every keystroke.
+local mermaid_cache = { path = nil, mtime = nil, value = nil }
+local mermaid_warned = nil -- last path we already warned about, to avoid spam
+local function mermaid_warn(path, msg)
+  if mermaid_warned ~= path then
+    mermaid_warned = path
+    vim.notify('[uq-markdown] ' .. msg, vim.log.levels.WARN)
+  end
+end
+local function mermaid_config()
+  local path = opts().mermaid_config
+  if not path or path == '' then return nil end
+  path = vim.fn.expand(path)
+  local stat = vim.uv.fs_stat(path)
+  if not stat then
+    mermaid_warn(path, 'mermaid_config not found: ' .. path)
+    return nil
+  end
+  local mtime = stat.mtime.sec
+  if mermaid_cache.path == path and mermaid_cache.mtime == mtime then
+    return mermaid_cache.value
+  end
+  local ok, data = pcall(function()
+    return vim.json.decode(table.concat(vim.fn.readfile(path), '\n'))
+  end)
+  if not ok or type(data) ~= 'table' then
+    mermaid_warn(path, 'failed to parse mermaid_config: ' .. path)
+    data = nil
+  else
+    mermaid_warned = nil -- reset so a later breakage warns again
+  end
+  mermaid_cache = { path = path, mtime = mtime, value = data }
+  return data
+end
+
 local function is_markdown(buf)
   local ft = vim.bo[buf].filetype
   for _, want in ipairs(opts().filetypes) do
@@ -45,6 +81,7 @@ local function send_update(buf)
     dir = dir,
     content = table.concat(lines, '\n'),
     theme = resolve_theme(),
+    mermaid_config = mermaid_config(),
   })
 end
 

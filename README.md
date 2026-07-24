@@ -69,11 +69,18 @@ require('uq-markdown').setup({
   app_class = 'uq-markdown',    -- WM class/app-id of the preview window (for tiling rules)
   user_data_dir = vim.fn.stdpath('cache') .. '/uq-markdown-profile',
   theme = 'auto',               -- 'auto' follows &background; or 'light' / 'dark'
+  mermaid_config = nil,         -- path to a mermaid config JSON (like mermaid CLI's `-c`)
   node = 'node',
   filetypes = { 'markdown', 'markdown.mdx', 'md' },
   debounce = 100,               -- ms between edits and refresh
 })
 ```
+
+`mermaid_config` points at a JSON file whose keys are merged into
+`mermaid.initialize` (same shape as the mermaid CLI's `-c`), overriding the
+plugin defaults — e.g. `{ "theme": "forest", "flowchart": { "curve": "linear" } }`.
+It's re-read automatically when the file changes on disk. If it sets `theme`,
+that wins over the nvim-derived light/dark theme.
 
 Tip: to dock the window on the side, add a rule in your WM keyed on the
 `uq-markdown` window class (e.g. i3/sway `for_window [app_id="uq-markdown"] …`,
