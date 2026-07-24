@@ -86,6 +86,38 @@ Tip: to dock the window on the side, add a rule in your WM keyed on the
 `uq-markdown` window class (e.g. i3/sway `for_window [app_id="uq-markdown"] …`,
 Hyprland `windowrule`, etc.).
 
+### Sway
+
+The preview window is launched with `--class=uq-markdown`. Sway reads this as the
+window's `app_id` **only when Chromium runs in native Wayland mode**, so add the
+Wayland hint via `browser_args` and match on `app_id`:
+
+```lua
+require('uq-markdown').setup({
+  browser_args = { '--ozone-platform-hint=auto' },
+})
+```
+
+Then in `~/.config/sway/config`:
+
+```
+# Dock the preview as a floating window pinned to the right third of the screen.
+for_window [app_id="uq-markdown"] {
+    floating enable
+    sticky enable
+    resize set 33 ppt 100 ppt
+    move position 67 ppt 0 ppt
+}
+```
+
+Prefer it tiled next to your editor instead? Drop the `floating`/`sticky`/
+`move` lines and keep only the `for_window [app_id="uq-markdown"]` selector with
+whatever layout commands you like (e.g. `split none`).
+
+Caveat: if Chromium falls back to Xwayland (no Wayland hint, or an X11 session),
+it has no `app_id` — match on `class` instead: `for_window [class="uq-markdown"]`.
+Check what the running window exposes with `swaymsg -t get_tree`.
+
 ## Development
 
 Only needed if you change the JS/frontend:
