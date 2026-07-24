@@ -1,0 +1,9 @@
+node_modules/
+*.log
+# Chromium preview profile (created at runtime).
+uq-markdown-profile/
+
+# Build outputs are intentionally committed so the plugin works without a build
+# step. Do NOT ignore them:
+#   public/app.js
+#   build/server.js

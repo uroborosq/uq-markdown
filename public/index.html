@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>uq-markdown</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --fg: #1f2328;
+        --muted: #59636e;
+        --border: #d1d9e0;
+        --code-bg: #f6f8fa;
+        --link: #0969da;
+        --accent: #0969da;
+        /* syntax tokens (GitHub light) */
+        --hl-comment: #6a737d;
+        --hl-keyword: #d73a49;
+        --hl-string: #032f62;
+        --hl-number: #005cc5;
+        --hl-title: #6f42c1;
+        --hl-type: #005cc5;
+        --hl-variable: #e36209;
+        --hl-tag: #22863a;
+        --hl-meta: #6a737d;
+      }
+      :root[data-theme='dark'] {
+        --bg: #0d1117;
+        --fg: #e6edf3;
+        --muted: #9198a1;
+        --border: #30363d;
+        --code-bg: #161b22;
+        --link: #4493f8;
+        --accent: #4493f8;
+        /* syntax tokens (GitHub dark) */
+        --hl-comment: #8b949e;
+        --hl-keyword: #ff7b72;
+        --hl-string: #a5d6ff;
+        --hl-number: #79c0ff;
+        --hl-title: #d2a8ff;
+        --hl-type: #ffa657;
+        --hl-variable: #ffa657;
+        --hl-tag: #7ee787;
+        --hl-meta: #8b949e;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background: var(--bg); }
+      body {
+        color: var(--fg);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans',
+          Helvetica, Arial, sans-serif;
+        font-size: 16px;
+        line-height: 1.6;
+      }
+      #content {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 2.5rem 2rem 6rem;
+      }
+      #content > *:first-child { margin-top: 0; }
+      h1, h2, h3, h4, h5, h6 { line-height: 1.25; margin: 1.5em 0 0.6em; font-weight: 600; }
+      h1 { font-size: 2em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+      h2 { font-size: 1.5em; border-bottom: 1px solid var(--border); padding-bottom: 0.3em; }
+      a { color: var(--link); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      p, ul, ol, blockquote, table { margin: 0 0 1em; }
+      img { max-width: 100%; height: auto; }
+      blockquote {
+        color: var(--muted);
+        border-left: 0.25em solid var(--border);
+        padding: 0 1em;
+        margin-left: 0;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 0.88em;
+        background: var(--code-bg);
+        padding: 0.2em 0.4em;
+        border-radius: 6px;
+      }
+      pre {
+        background: var(--code-bg);
+        padding: 1rem;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+      pre code { background: none; padding: 0; font-size: 0.85em; }
+
+      /* highlight.js token colors (themed via CSS variables above). */
+      .hljs { color: var(--fg); background: var(--code-bg); }
+      .hljs-comment, .hljs-quote { color: var(--hl-comment); font-style: italic; }
+      .hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-doctag,
+      .hljs-formula { color: var(--hl-keyword); }
+      .hljs-string, .hljs-regexp, .hljs-addition { color: var(--hl-string); }
+      .hljs-number, .hljs-symbol, .hljs-bullet, .hljs-link { color: var(--hl-number); }
+      .hljs-title, .hljs-title.class_, .hljs-title.function_, .hljs-section,
+      .hljs-name { color: var(--hl-title); }
+      .hljs-type, .hljs-built_in, .hljs-builtin-name, .hljs-class .hljs-title,
+      .hljs-params { color: var(--hl-type); }
+      .hljs-variable, .hljs-template-variable, .hljs-attr, .hljs-attribute,
+      .hljs-property { color: var(--hl-variable); }
+      .hljs-tag, .hljs-selector-id, .hljs-selector-class, .hljs-selector-attr,
+      .hljs-selector-pseudo { color: var(--hl-tag); }
+      .hljs-meta, .hljs-meta .hljs-keyword { color: var(--hl-meta); }
+      .hljs-deletion { color: var(--hl-keyword); }
+      .hljs-emphasis { font-style: italic; }
+      .hljs-strong { font-weight: 600; }
+      table { border-collapse: collapse; display: block; overflow-x: auto; }
+      th, td { border: 1px solid var(--border); padding: 0.4em 0.85em; }
+      th { background: var(--code-bg); }
+      hr { border: none; border-top: 1px solid var(--border); margin: 2em 0; }
+
+      /* mermaid diagram containers: interactive pan/zoom surface. */
+      pre.mermaid {
+        background: transparent;
+        padding: 0;
+        margin: 1.5em 0;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        overflow: hidden;
+        cursor: grab;
+        min-height: 60px;
+        position: relative;
+      }
+      pre.mermaid.dragging { cursor: grabbing; }
+      pre.mermaid svg { display: block; }
+    </style>
+  </head>
+  <body>
+    <main id="content"></main>
+    <script src="/app.js"></script>
+  </body>
+</html>

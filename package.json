@@ -1,0 +1,22 @@
+{
+  "name": "uq-markdown",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sidecar + frontend bundle for the uq-markdown Neovim preview plugin (latest mermaid + ELK).",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch"
+  },
+  "dependencies": {
+    "@mermaid-js/layout-elk": "latest",
+    "highlight.js": "latest",
+    "markdown-it": "latest",
+    "markdown-it-anchor": "latest",
+    "mermaid": "latest",
+    "ws": "latest"
+  },
+  "devDependencies": {
+    "esbuild": "latest"
+  }
+}
