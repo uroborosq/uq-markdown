@@ -13,3 +13,4 @@ end
 cmd('MdPreview', 'open', 'Open uq-markdown preview')
 cmd('MdPreviewStop', 'close', 'Stop uq-markdown preview')
 cmd('MdPreviewToggle', 'toggle', 'Toggle uq-markdown preview')
+cmd('MdPreviewConfig', 'show_config', 'Show uq-markdown config (debug)')

@@ -222,6 +222,17 @@ function M.is_active()
   return state.active
 end
 
+-- Print the current configuration (and resolved mermaid config) for debugging.
+function M.show_config()
+  local info = {
+    options = opts(),
+    resolved_theme = resolve_theme(),
+    mermaid_config = mermaid_config(),
+    active = state.active,
+  }
+  vim.notify(vim.inspect(info), vim.log.levels.INFO, { title = 'uq-markdown' })
+end
+
 function M.setup(user_opts)
   -- Commands are registered in plugin/uq-markdown.lua so they exist without
   -- calling setup(); setup() only applies configuration.
