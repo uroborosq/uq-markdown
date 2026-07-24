@@ -102,12 +102,7 @@ Then in `~/.config/sway/config`:
 
 ```
 # Dock the preview as a floating window pinned to the right third of the screen.
-for_window [app_id="uq-markdown"] {
-    floating enable
-    sticky enable
-    resize set 33 ppt 100 ppt
-    move position 67 ppt 0 ppt
-}
+no_focus [app_id="uq-markdown"] 
 ```
 
 Prefer it tiled next to your editor instead? Drop the `floating`/`sticky`/
