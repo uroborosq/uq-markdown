@@ -47,6 +47,24 @@ let lastUpdate = null;
 /** Last known cursor line, replayed on connect for scroll sync. */
 let lastCursor = null;
 
+/**
+ * Serve index.html with the current theme baked into the <html> tag so the
+ * browser's first paint already uses the right background — otherwise the page
+ * flashes the default white bg until the WebSocket delivers the first update.
+ */
+async function serveIndex(res) {
+  try {
+    const html = await readFile(resolve(PUBLIC_DIR, 'index.html'), 'utf8');
+    const theme = lastUpdate && lastUpdate.theme === 'dark' ? 'dark' : 'light';
+    const themed = html.replace('data-theme="light"', `data-theme="${theme}"`);
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+    res.end(themed);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('not found');
+  }
+}
+
 async function serveStatic(res, filePath, contentType) {
   try {
     const data = await readFile(filePath);
@@ -62,7 +80,7 @@ const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
 
   if (url.pathname === '/' || url.pathname === '/index.html') {
-    return serveStatic(res, resolve(PUBLIC_DIR, 'index.html'), MIME['.html']);
+    return serveIndex(res);
   }
   if (url.pathname === '/app.js') {
     return serveStatic(res, resolve(PUBLIC_DIR, 'app.js'), MIME['.js']);

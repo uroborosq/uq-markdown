@@ -207,12 +207,15 @@ function M.open()
 
   server.start(opts(), function(port)
     -- on_ready (already on the main loop via jobstart callback)
+    -- Push the first update (with the resolved theme) before opening the
+    -- browser, so the server can bake the theme into index.html on first load
+    -- and avoid a white-background flash before the WebSocket connects.
+    if is_markdown(start_buf) then
+      switch_to(start_buf)
+    end
     if not browser.open(opts(), port) then
       M.close()
       return
-    end
-    if is_markdown(start_buf) then
-      switch_to(start_buf)
     end
   end, on_browser_message)
 end
