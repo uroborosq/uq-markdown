@@ -27,10 +27,16 @@ let userMermaidConfig = {};
 // which collapsed the page height (jumping the scroll) and made diagrams blink.
 // Reusing unchanged diagrams from here keeps them untouched while you type.
 const mermaidSvgCache = new Map();
+// Last good SVG per diagram slot (keyed by its source line). While you edit a
+// diagram its source keeps changing (cache misses), so we hold the previous
+// render on screen instead of collapsing to source text.
+const mermaidLastByLine = new Map();
+let mermaidSeq = 0; // unique ids for off-DOM mermaid.render calls
 function initMermaid(theme) {
   currentTheme = theme === 'dark' ? 'dark' : 'default';
   // Theme / config changes make previously rendered SVGs stale.
   mermaidSvgCache.clear();
+  mermaidLastByLine.clear();
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'loose',
@@ -202,36 +208,52 @@ async function render(update) {
   content.innerHTML = md.render(update.content || '');
   rewriteLocalImages(content, currentDir);
 
-  // Render mermaid diagrams. The DOM is fresh, but most diagrams are unchanged
-  // while you type prose — reuse those from the cache synchronously so their
-  // height never collapses. Only genuinely-changed diagrams hit the async path.
-  const toRender = []; // { pre, src } — diagrams whose source isn't cached yet
+  // Render mermaid diagrams. Reuse unchanged ones from the cache synchronously
+  // (no height collapse). For a changed diagram — the one you're editing — keep
+  // its last good SVG on screen and render the new source off-DOM with
+  // mermaid.render, swapping it in only when ready. That way editing a diagram
+  // no longer tears it down to source text (which collapsed the height and
+  // blinked), and invalid intermediate syntax simply keeps the last good render.
+  const toRender = []; // { pre, src, line } — diagrams needing an async render
   for (const pre of content.querySelectorAll('pre.mermaid')) {
     const src = pre.textContent; // still the graph source (not yet processed)
+    const line = pre.getAttribute('data-source-line') || '';
     const cached = mermaidSvgCache.get(src);
     if (cached !== undefined) {
       pre.innerHTML = cached;
       pre.setAttribute('data-processed', 'true');
+      mermaidLastByLine.set(line, cached);
       makeZoomable(pre);
     } else {
-      toRender.push({ pre, src });
+      // Bridge the edit: show the previous good render for this slot so the page
+      // doesn't collapse while the new source renders in the background.
+      const prev = mermaidLastByLine.get(line);
+      if (prev !== undefined) {
+        pre.innerHTML = prev;
+        pre.setAttribute('data-processed', 'true');
+      }
+      toRender.push({ pre, src, line });
     }
   }
-  if (toRender.length) {
+  for (const { pre, src, line } of toRender) {
+    let rendered;
     try {
-      await mermaid.run({ nodes: toRender.map((t) => t.pre) });
+      rendered = await mermaid.render('mmd-' + ++mermaidSeq, src);
     } catch (e) {
       console.error('[uq-markdown] mermaid render error', e);
+      continue; // leave the previous good render (or source text) in place
     }
     if (token !== renderToken) return; // a newer update superseded us
-    for (const { pre, src } of toRender) {
-      mermaidSvgCache.set(src, pre.innerHTML);
-      makeZoomable(pre);
-    }
-    // Bound the cache: editing a diagram churns keys, and SVG strings are large.
-    while (mermaidSvgCache.size > 64) {
-      mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
-    }
+    pre.innerHTML = rendered.svg;
+    rendered.bindFunctions?.(pre);
+    pre.setAttribute('data-processed', 'true');
+    mermaidSvgCache.set(src, rendered.svg);
+    mermaidLastByLine.set(line, rendered.svg);
+    makeZoomable(pre);
+  }
+  // Bound the cache: editing a diagram churns keys, and SVG strings are large.
+  while (mermaidSvgCache.size > 64) {
+    mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
   }
 
   // Restore the viewport by pinning the cursor block to its previous on-screen
