@@ -12,6 +12,8 @@ import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 
+import { pickTargetIndex, computeScrollTarget } from './scroll.mjs';
+
 // --- mermaid + ELK ----------------------------------------------------------
 mermaid.registerLayoutLoaders(elkLayouts);
 
@@ -82,6 +84,23 @@ md.core.ruler.push('source_line', (state) => {
 // --- DOM --------------------------------------------------------------------
 const content = document.getElementById('content');
 let currentDir = null; // directory of the previewed file, for image resolution.
+let lastCursorLine = 1; // last source line reported by Neovim, for scroll anchoring.
+
+// Collect the source-line-tagged blocks in document order, with their lines
+// parsed once so the pure helpers can work on plain numbers.
+function lineElements() {
+  const els = content.querySelectorAll('[data-source-line]');
+  const lines = [];
+  for (const el of els) lines.push(parseInt(el.getAttribute('data-source-line'), 10));
+  return { els, lines };
+}
+
+// The rendered block that owns a given source line (or null before first render).
+function elementForLine(line) {
+  const { els, lines } = lineElements();
+  const idx = pickTargetIndex(lines, line);
+  return idx >= 0 ? els[idx] : null;
+}
 
 function rewriteLocalImages(root, dir) {
   if (!dir) return;
@@ -164,6 +183,13 @@ async function render(update) {
   document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
 
   const token = ++renderToken;
+
+  // Scroll anchoring: remember where the cursor's block sits on screen so we can
+  // pin it there across the re-render, even when block heights change above it.
+  // This is the single source of scroll truth during edits; without it, a
+  // pixel-based restore fights the cursor sync and the preview jitters.
+  const anchorBefore = elementForLine(lastCursorLine);
+  const anchorTopBefore = anchorBefore ? anchorBefore.getBoundingClientRect().top : null;
   const prevScroll = window.scrollY;
 
   content.innerHTML = md.render(update.content || '');
@@ -181,22 +207,27 @@ async function render(update) {
     for (const pre of content.querySelectorAll('pre.mermaid')) makeZoomable(pre);
   }
 
-  // Keep the viewport roughly stable across live edits.
-  window.scrollTo(0, prevScroll);
+  // Restore the viewport by pinning the cursor block to its previous on-screen
+  // position; fall back to the raw scroll offset when it can't be located.
+  const anchorAfter = elementForLine(lastCursorLine);
+  if (anchorAfter && anchorTopBefore !== null) {
+    const delta = anchorAfter.getBoundingClientRect().top - anchorTopBefore;
+    window.scrollTo(0, Math.max(0, window.scrollY + delta));
+  } else {
+    window.scrollTo(0, prevScroll);
+  }
 }
 
+// Follow the Neovim cursor, but only when its block is off-screen, and without a
+// smooth animation. Scrolling on every keystroke — the way the old code forced
+// the line to a third of the viewport each time — is what made typing jump.
 function scrollToLine(line) {
-  const els = content.querySelectorAll('[data-source-line]');
-  let target = null;
-  for (const el of els) {
-    const l = parseInt(el.getAttribute('data-source-line'), 10);
-    if (l <= line) target = el;
-    else break;
-  }
-  if (target) {
-    const rect = target.getBoundingClientRect();
-    window.scrollTo({ top: window.scrollY + rect.top - window.innerHeight / 3, behavior: 'smooth' });
-  }
+  const target = elementForLine(line);
+  if (!target) return;
+  const rectTop = target.getBoundingClientRect().top;
+  const y = computeScrollTarget(rectTop, window.scrollY, window.innerHeight);
+  if (y === null) return; // already comfortably visible — leave the viewport alone
+  window.scrollTo(0, Math.max(0, y));
 }
 
 // Reverse sync: clicking a block tells Neovim which source line it maps to.
@@ -222,6 +253,7 @@ function connect() {
         render(msg);
         break;
       case 'cursor':
+        lastCursorLine = msg.line;
         scrollToLine(msg.line);
         break;
       case 'theme':

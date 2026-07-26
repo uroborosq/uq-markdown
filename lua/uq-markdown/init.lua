@@ -14,7 +14,13 @@ local state = {
   current_buf = nil, -- markdown buffer currently mirrored in the preview
   augroup = nil,
   timer = nil, -- debounce timer
+  cursor_timer = nil, -- trailing-send timer for cursor throttle
+  cursor_last = 0, -- vim.uv.now() of the last cursor send
 }
+
+-- Cap how often a cursor position is pushed. Fast typing fires CursorMovedI on
+-- every keystroke; without this the socket gets flooded with redundant sends.
+local CURSOR_INTERVAL = 60
 
 local function opts()
   return config.options
@@ -99,8 +105,24 @@ end
 
 local function send_cursor()
   if not state.active then return end
+  state.cursor_last = vim.uv.now()
   local line = vim.api.nvim_win_get_cursor(0)[1]
   server.send({ type = 'cursor', line = line })
+end
+
+-- Throttle cursor sends: emit immediately when the interval has elapsed,
+-- otherwise schedule a single trailing send so the final position still lands.
+local function send_cursor_throttled()
+  if not state.active then return end
+  if not state.cursor_timer then state.cursor_timer = vim.uv.new_timer() end
+  local since = vim.uv.now() - state.cursor_last
+  if since >= CURSOR_INTERVAL then
+    state.cursor_timer:stop()
+    send_cursor()
+  else
+    state.cursor_timer:stop()
+    state.cursor_timer:start(CURSOR_INTERVAL - since, 0, vim.schedule_wrap(send_cursor))
+  end
 end
 
 -- Switch the preview to a markdown buffer (called when one becomes active).
@@ -152,7 +174,7 @@ local function setup_autocmds()
     group = grp,
     callback = function(ev)
       if state.active and is_markdown(ev.buf) then
-        send_cursor()
+        send_cursor_throttled()
       end
     end,
   })
@@ -200,6 +222,9 @@ function M.close()
   state.active = false
   if state.timer then
     state.timer:stop()
+  end
+  if state.cursor_timer then
+    state.cursor_timer:stop()
   end
   if state.augroup then
     pcall(vim.api.nvim_del_augroup_by_id, state.augroup)
