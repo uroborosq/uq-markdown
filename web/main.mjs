@@ -22,8 +22,15 @@ let currentTheme = 'default';
 // keys override the defaults below; if it sets `theme`, that wins over the
 // nvim-derived theme.
 let userMermaidConfig = {};
+// Rendered-SVG cache keyed by a diagram's source text. Re-rendering the whole
+// document on every keystroke used to tear down and re-run *every* diagram,
+// which collapsed the page height (jumping the scroll) and made diagrams blink.
+// Reusing unchanged diagrams from here keeps them untouched while you type.
+const mermaidSvgCache = new Map();
 function initMermaid(theme) {
   currentTheme = theme === 'dark' ? 'dark' : 'default';
+  // Theme / config changes make previously rendered SVGs stale.
+  mermaidSvgCache.clear();
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'loose',
@@ -195,16 +202,36 @@ async function render(update) {
   content.innerHTML = md.render(update.content || '');
   rewriteLocalImages(content, currentDir);
 
-  // Render mermaid diagrams. Each render regenerates the DOM, so nodes are fresh.
-  const nodes = content.querySelectorAll('pre.mermaid');
-  if (nodes.length) {
+  // Render mermaid diagrams. The DOM is fresh, but most diagrams are unchanged
+  // while you type prose — reuse those from the cache synchronously so their
+  // height never collapses. Only genuinely-changed diagrams hit the async path.
+  const toRender = []; // { pre, src } — diagrams whose source isn't cached yet
+  for (const pre of content.querySelectorAll('pre.mermaid')) {
+    const src = pre.textContent; // still the graph source (not yet processed)
+    const cached = mermaidSvgCache.get(src);
+    if (cached !== undefined) {
+      pre.innerHTML = cached;
+      pre.setAttribute('data-processed', 'true');
+      makeZoomable(pre);
+    } else {
+      toRender.push({ pre, src });
+    }
+  }
+  if (toRender.length) {
     try {
-      await mermaid.run({ nodes });
+      await mermaid.run({ nodes: toRender.map((t) => t.pre) });
     } catch (e) {
       console.error('[uq-markdown] mermaid render error', e);
     }
     if (token !== renderToken) return; // a newer update superseded us
-    for (const pre of content.querySelectorAll('pre.mermaid')) makeZoomable(pre);
+    for (const { pre, src } of toRender) {
+      mermaidSvgCache.set(src, pre.innerHTML);
+      makeZoomable(pre);
+    }
+    // Bound the cache: editing a diagram churns keys, and SVG strings are large.
+    while (mermaidSvgCache.size > 64) {
+      mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
+    }
   }
 
   // Restore the viewport by pinning the cursor block to its previous on-screen
