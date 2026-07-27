@@ -27,3 +27,31 @@ export function computeScrollTarget(rectTop, scrollY, innerHeight, band = 0.1) {
   if (rectTop >= top && rectTop <= bottom) return null;
   return scrollY + rectTop - innerHeight / 3;
 }
+
+// Vim-style navigation keys -> a scroll delta, or null when the key is not one
+// of ours (so the caller leaves the event alone). `mods` is anything with the
+// KeyboardEvent modifier flags — the event itself in the browser, a plain object
+// in tests. h/j/k/l move by `step` px; <C-d>/<C-u> move by half a viewport, like
+// vim. Shift/alt/meta combos are deliberately ignored: those are vim commands
+// (J, K) or browser shortcuts, not scrolling.
+export function keyScrollDelta(key, mods, innerHeight, step = 64) {
+  if (mods.altKey || mods.metaKey || mods.shiftKey) return null;
+  const half = Math.round(innerHeight / 2);
+  if (mods.ctrlKey) {
+    if (key === 'd') return { x: 0, y: half };
+    if (key === 'u') return { x: 0, y: -half };
+    return null;
+  }
+  switch (key) {
+    case 'j':
+      return { x: 0, y: step };
+    case 'k':
+      return { x: 0, y: -step };
+    case 'l':
+      return { x: step, y: 0 };
+    case 'h':
+      return { x: -step, y: 0 };
+    default:
+      return null;
+  }
+}

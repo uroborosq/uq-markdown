@@ -23,6 +23,9 @@ Neovim (Lua) ──stdin(JSON)──▶ Node sidecar ──HTTP/WS──▶ Chro
   `highlight.js` (GitHub light/dark theme, follows your `&background`), and renders
   every ` ```mermaid ` block with mermaid + ELK. Large diagrams support
   **Ctrl/Alt + wheel** to zoom and **drag** to pan (double-click to reset).
+- The preview window takes **vim-style keys**: `h`/`j`/`k`/`l` scroll, `<C-d>`/`<C-u>`
+  jump half a screen. `h`/`l` pan the wide table or code block under the mouse pointer
+  when there is one, otherwise the page.
 - The preview **follows the active markdown buffer** and stays open when you switch
   to non-markdown buffers (peek.nvim-style).
 

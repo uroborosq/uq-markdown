@@ -12,7 +12,7 @@ import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 
-import { pickTargetIndex, computeScrollTarget } from './scroll.mjs';
+import { pickTargetIndex, computeScrollTarget, keyScrollDelta } from './scroll.mjs';
 
 // --- mermaid + ELK ----------------------------------------------------------
 mermaid.registerLayoutLoaders(elkLayouts);
@@ -278,6 +278,49 @@ function scrollToLine(line) {
   if (y === null) return; // already comfortably visible — leave the viewport alone
   window.scrollTo(0, Math.max(0, y));
 }
+
+// --- vim-style keyboard navigation ------------------------------------------
+// The preview is a read-only page, so h/j/k/l and <C-d>/<C-u> are free to drive
+// the viewport. Keys act on whatever is scrollable under the mouse pointer, so
+// h/l pan a wide table or code block when you hover it, and fall back to the
+// window otherwise.
+const SCROLL_STEP = 64; // ~2 text lines per press; key repeat makes it smooth
+
+let pointerX = 0;
+let pointerY = 0;
+window.addEventListener('mousemove', (e) => {
+  pointerX = e.clientX;
+  pointerY = e.clientY;
+});
+
+// Deepest element under the pointer that can actually scroll along `axis`
+// ('x' | 'y'), or null when nothing there scrolls (so the window should).
+function scrollableUnderPointer(axis) {
+  let el = document.elementFromPoint(pointerX, pointerY);
+  while (el && el !== document.body && el !== document.documentElement) {
+    const style = getComputedStyle(el);
+    const overflow = axis === 'x' ? style.overflowX : style.overflowY;
+    const room =
+      axis === 'x' ? el.scrollWidth - el.clientWidth : el.scrollHeight - el.clientHeight;
+    if ((overflow === 'auto' || overflow === 'scroll') && room > 1) return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+window.addEventListener('keydown', (e) => {
+  // Never steal keys from a focused field (mermaid's loose security level can
+  // put real form controls on the page via foreignObject).
+  const t = e.target;
+  if (t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)))
+    return;
+  const delta = keyScrollDelta(e.key, e, window.innerHeight, SCROLL_STEP);
+  if (!delta) return;
+  e.preventDefault(); // <C-d>/<C-u> are browser shortcuts otherwise
+  const target = scrollableUnderPointer(delta.x !== 0 ? 'x' : 'y');
+  if (target) target.scrollBy(delta.x, delta.y);
+  else window.scrollBy(delta.x, delta.y);
+});
 
 // Reverse sync: clicking a block tells Neovim which source line it maps to.
 content.addEventListener('dblclick', (e) => {
