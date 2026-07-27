@@ -1,7 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { pickTargetIndex, computeScrollTarget, keyScrollDelta } from './scroll.mjs';
+import {
+  pickTargetIndex,
+  computeScrollTarget,
+  keyScrollDelta,
+  accumulateScroll,
+} from './scroll.mjs';
 
 const NONE = { ctrlKey: false, altKey: false, metaKey: false, shiftKey: false };
 const CTRL = { ...NONE, ctrlKey: true };
@@ -68,4 +73,26 @@ test('keyScrollDelta: ctrl does not hijack hjkl, and other modifiers are ignored
   assert.equal(keyScrollDelta('j', { ...NONE, shiftKey: true }, 1000), null);
   assert.equal(keyScrollDelta('d', { ...CTRL, altKey: true }, 1000), null);
   assert.equal(keyScrollDelta('u', { ...CTRL, metaKey: true }, 1000), null);
+});
+
+test('accumulateScroll: with no animation in flight it moves from the live position', () => {
+  assert.equal(accumulateScroll(null, 300, 64, 5000), 364);
+});
+
+test('accumulateScroll: repeats stack on the pending target, not the live position', () => {
+  // The point of the helper: mid-animation the viewport is still at 300, but a
+  // second press must aim past the first press's destination, not re-measure.
+  assert.equal(accumulateScroll(364, 310, 64, 5000), 428);
+  assert.equal(accumulateScroll(428, 350, 64, 5000), 492);
+});
+
+test('accumulateScroll: clamps to the scrollable range', () => {
+  assert.equal(accumulateScroll(null, 20, -64, 5000), 0);
+  assert.equal(accumulateScroll(4980, 4900, 64, 5000), 5000);
+  assert.equal(accumulateScroll(null, 0, -64, 0), 0);
+});
+
+test('accumulateScroll: a pending target outside the range is still clamped', () => {
+  assert.equal(accumulateScroll(-500, 0, -64, 5000), 0);
+  assert.equal(accumulateScroll(9000, 4000, 64, 5000), 5000);
 });

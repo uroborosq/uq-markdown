@@ -12,7 +12,12 @@ import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
 import elkLayouts from '@mermaid-js/layout-elk';
 
-import { pickTargetIndex, computeScrollTarget, keyScrollDelta } from './scroll.mjs';
+import {
+  pickTargetIndex,
+  computeScrollTarget,
+  keyScrollDelta,
+  accumulateScroll,
+} from './scroll.mjs';
 
 // --- mermaid + ELK ----------------------------------------------------------
 mermaid.registerLayoutLoaders(elkLayouts);
@@ -185,6 +190,45 @@ function makeZoomable(pre) {
   });
 }
 
+// --- smooth-scroll bookkeeping ----------------------------------------------
+// A smooth scroll is stateful: it runs for a few hundred ms and any other
+// scroll call during that window silently aborts it wherever it happens to be.
+// That was the real cause of the old typing jitter — the cursor sync started an
+// animation and the debounced re-render snapped it dead mid-flight. So we track
+// whether one of *our* animations is in the air and let render() step aside.
+let scrollAnimating = false;
+let scrollAnimTimer = null;
+// Safety net: `scrollend` never fires when a scroll resolves to zero movement
+// (the target was already the current offset), which would otherwise pin the
+// flag on forever and disable anchoring for the rest of the session.
+const SMOOTH_MAX_MS = 800;
+
+function smoothScrollTo(y) {
+  scrollAnimating = true;
+  clearTimeout(scrollAnimTimer);
+  scrollAnimTimer = setTimeout(() => {
+    scrollAnimating = false;
+  }, SMOOTH_MAX_MS);
+  keyScrollPending = null; // the cursor now owns the viewport, not held keys
+  window.scrollTo({ top: y, behavior: 'smooth' });
+}
+
+// Any scroll settling — ours, a wheel, a key — ends the in-flight window and
+// invalidates the accumulated key destination, which must never be built on
+// after the user has moved the viewport by other means. Capture phase, because
+// `scrollend` does not bubble and we want it from inner elements too.
+document.addEventListener(
+  'scrollend',
+  (e) => {
+    keyScrollPending = null;
+    if (e.target === document || e.target === document.scrollingElement) {
+      scrollAnimating = false;
+      clearTimeout(scrollAnimTimer);
+    }
+  },
+  true,
+);
+
 let renderToken = 0;
 async function render(update) {
   currentDir = update.dir || null;
@@ -201,7 +245,10 @@ async function render(update) {
   // pin it there across the re-render, even when block heights change above it.
   // This is the single source of scroll truth during edits; without it, a
   // pixel-based restore fights the cursor sync and the preview jitters.
-  const anchorBefore = elementForLine(lastCursorLine);
+  // Skipped while an animation flies: the geometry we'd capture is a transient
+  // frame of it, so pinning to it would freeze the scroll at a random offset.
+  const animating = scrollAnimating;
+  const anchorBefore = animating ? null : elementForLine(lastCursorLine);
   const anchorTopBefore = anchorBefore ? anchorBefore.getBoundingClientRect().top : null;
   const prevScroll = window.scrollY;
 
@@ -259,7 +306,13 @@ async function render(update) {
   // Restore the viewport by pinning the cursor block to its previous on-screen
   // position; fall back to the raw scroll offset when it can't be located.
   const anchorAfter = elementForLine(lastCursorLine);
-  if (anchorAfter && anchorTopBefore !== null) {
+  if (animating) {
+    // The animation's destination was computed against the DOM we just threw
+    // away. Rather than abort it with a jump, re-aim it at the cursor block's
+    // new position — scrollToLine reads offset and scrollY in the same frame,
+    // so the absolute target it derives is correct even mid-flight.
+    scrollToLine(lastCursorLine);
+  } else if (anchorAfter && anchorTopBefore !== null) {
     const delta = anchorAfter.getBoundingClientRect().top - anchorTopBefore;
     window.scrollTo(0, Math.max(0, window.scrollY + delta));
   } else {
@@ -267,16 +320,18 @@ async function render(update) {
   }
 }
 
-// Follow the Neovim cursor, but only when its block is off-screen, and without a
-// smooth animation. Scrolling on every keystroke — the way the old code forced
-// the line to a third of the viewport each time — is what made typing jump.
+// Follow the Neovim cursor, but only when its block is off-screen. The gate is
+// what keeps typing calm: the old code forced the line to a third of the
+// viewport on *every* keystroke, so the preview never stopped moving. Once the
+// scroll only happens on a real jump, animating it is free — a jump you can see
+// travel is easier to follow than one that teleports.
 function scrollToLine(line) {
   const target = elementForLine(line);
   if (!target) return;
   const rectTop = target.getBoundingClientRect().top;
   const y = computeScrollTarget(rectTop, window.scrollY, window.innerHeight);
   if (y === null) return; // already comfortably visible — leave the viewport alone
-  window.scrollTo(0, Math.max(0, y));
+  smoothScrollTo(Math.max(0, y));
 }
 
 // --- vim-style keyboard navigation ------------------------------------------
@@ -284,7 +339,36 @@ function scrollToLine(line) {
 // the viewport. Keys act on whatever is scrollable under the mouse pointer, so
 // h/l pan a wide table or code block when you hover it, and fall back to the
 // window otherwise.
-const SCROLL_STEP = 64; // ~2 text lines per press; key repeat makes it smooth
+const SCROLL_STEP = 64; // ~2 text lines per press
+
+// Destination of the key scroll currently in flight, so held keys accumulate
+// instead of each restarting from mid-animation. Cleared on `scrollend` (above,
+// and on the element handler below) — including scrolls the user drives with the
+// wheel, which is exactly when a stale target must not be built on.
+let keyScrollPending = null;
+let keyScrollTarget = null; // the element (or null for the window) it belongs to
+let keyScrollAxis = null; // 'x' | 'y' — a direction change starts a fresh run
+
+// Scroll `el` (null = the window) by a one-axis delta, animated, folding rapid
+// repeats into a single moving destination.
+function keyScroll(el, delta) {
+  const axis = delta.x !== 0 ? 'x' : 'y';
+  const box = el || document.scrollingElement || document.documentElement;
+  const current = axis === 'x' ? box.scrollLeft : box.scrollTop;
+  const max =
+    axis === 'x' ? box.scrollWidth - box.clientWidth : box.scrollHeight - box.clientHeight;
+  const stale = el !== keyScrollTarget || axis !== keyScrollAxis;
+  const to = accumulateScroll(
+    stale ? null : keyScrollPending,
+    current,
+    axis === 'x' ? delta.x : delta.y,
+    max,
+  );
+  keyScrollTarget = el;
+  keyScrollAxis = axis;
+  keyScrollPending = to;
+  (el || window).scrollTo({ [axis === 'x' ? 'left' : 'top']: to, behavior: 'smooth' });
+}
 
 let pointerX = 0;
 let pointerY = 0;
@@ -317,9 +401,7 @@ window.addEventListener('keydown', (e) => {
   const delta = keyScrollDelta(e.key, e, window.innerHeight, SCROLL_STEP);
   if (!delta) return;
   e.preventDefault(); // <C-d>/<C-u> are browser shortcuts otherwise
-  const target = scrollableUnderPointer(delta.x !== 0 ? 'x' : 'y');
-  if (target) target.scrollBy(delta.x, delta.y);
-  else window.scrollBy(delta.x, delta.y);
+  keyScroll(scrollableUnderPointer(delta.x !== 0 ? 'x' : 'y'), delta);
 });
 
 // Reverse sync: clicking a block tells Neovim which source line it maps to.

@@ -55,3 +55,15 @@ export function keyScrollDelta(key, mods, innerHeight, step = 64) {
       return null;
   }
 }
+
+// Fold a repeated key press into a single accumulated destination. `pending` is
+// the offset the previous press aimed at (null when nothing is animating),
+// `current` where the viewport actually sits right now, `max` the furthest it
+// can go. Building on `pending` rather than `current` is what makes holding a
+// key travel at a steady speed: a smooth animation measures its delta from the
+// live position, so without this every repeat would restart from mid-flight and
+// the page would crawl instead of accelerating away.
+export function accumulateScroll(pending, current, delta, max) {
+  const base = pending === null ? current : pending;
+  return Math.max(0, Math.min(max, base + delta));
+}
