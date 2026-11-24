@@ -23,6 +23,9 @@
         --hl-variable: #e36209;
         --hl-tag: #22863a;
         --hl-meta: #6a737d;
+        --error-fg: #cf222e;
+        --error-bg: #ffebe9;
+        --error-border: #ff818266;
       }
       :root[data-theme='dark'] {
         --bg: #0d1117;
@@ -42,6 +45,9 @@
         --hl-variable: #ffa657;
         --hl-tag: #7ee787;
         --hl-meta: #8b949e;
+        --error-fg: #ff7b72;
+        --error-bg: #f851491a;
+        --error-border: #f8514966;
       }
       * { box-sizing: border-box; }
       html, body { margin: 0; padding: 0; background: var(--bg); }
@@ -124,6 +130,28 @@
       }
       pre.mermaid.dragging { cursor: grabbing; }
       pre.mermaid svg { display: block; }
+      /* not rendered (yet, or because of an error): show the source readably. */
+      pre.mermaid:not([data-processed]) { padding: 1rem; cursor: auto; }
+      /* mermaid render error, shown right under the diagram it belongs to. */
+      pre.mermaid:has(+ .mermaid-error) { margin-bottom: 0.5em; }
+      .mermaid-error {
+        margin: 0 0 1.5em;
+        padding: 0.6em 0.9em;
+        color: var(--error-fg);
+        background: var(--error-bg);
+        border: 1px solid var(--error-border);
+        border-radius: 8px;
+      }
+      .mermaid-error-title { font-weight: 600; font-size: 0.9em; }
+      .mermaid-error pre {
+        margin: 0.4em 0 0;
+        padding: 0;
+        background: none;
+        color: inherit;
+        font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 0.8em;
+        white-space: pre-wrap;
+      }
     </style>
   </head>
   <body>

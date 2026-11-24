@@ -17,6 +17,7 @@ import {
   keyScrollDelta,
   accumulateScroll,
 } from './scroll.mjs';
+import { formatMermaidError, mermaidErrorText } from './mermaid-error.mjs';
 
 // --- mermaid + ELK ----------------------------------------------------------
 let currentTheme = 'default';
@@ -33,12 +34,17 @@ const mermaidSvgCache = new Map();
 // diagram its source keeps changing (cache misses), so we hold the previous
 // render on screen instead of collapsing to source text.
 const mermaidLastByLine = new Map();
+// Error text per failing diagram source. Lets us show the error box
+// synchronously on later updates (no flicker while you type elsewhere in the
+// document) and skips re-parsing a source we already know is broken.
+const mermaidErrCache = new Map();
 let mermaidSeq = 0; // unique ids for off-DOM mermaid.render calls
 function initMermaid(theme) {
   currentTheme = theme === 'dark' ? 'dark' : 'default';
   // Theme / config changes make previously rendered SVGs stale.
   mermaidSvgCache.clear();
   mermaidLastByLine.clear();
+  mermaidErrCache.clear(); // a config change may make a failing diagram valid
   mermaid.initialize({
     startOnLoad: false,
     securityLevel: 'loose',
@@ -233,6 +239,22 @@ document.addEventListener(
   true,
 );
 
+// Show why a diagram failed to render, in a box right under it. The box is
+// rebuilt with the rest of #content on every update, so there is nothing to
+// clear once the source becomes valid.
+function showMermaidError(pre, errorText, src, line) {
+  const { title, detail } = formatMermaidError(errorText, Number(line), src);
+  const box = document.createElement('div');
+  box.className = 'mermaid-error';
+  const head = document.createElement('div');
+  head.className = 'mermaid-error-title';
+  head.textContent = title;
+  const body = document.createElement('pre');
+  body.textContent = detail;
+  box.append(head, body);
+  pre.after(box);
+}
+
 let renderToken = 0;
 async function render(update) {
   currentDir = update.dir || null;
@@ -283,7 +305,9 @@ async function render(update) {
         pre.innerHTML = prev;
         pre.setAttribute('data-processed', 'true');
       }
-      toRender.push({ pre, src, line });
+      const knownError = mermaidErrCache.get(src);
+      if (knownError !== undefined) showMermaidError(pre, knownError, src, line);
+      else toRender.push({ pre, src, line });
     }
   }
   for (const { pre, src, line } of toRender) {
@@ -294,8 +318,13 @@ async function render(update) {
     } catch (e) {
       // Belt and braces: drop any temp container mermaid left in <body>.
       document.getElementById('d' + id)?.remove();
-      console.error('[uq-markdown] mermaid render error', e);
-      continue; // leave the previous good render (or source text) in place
+      if (token !== renderToken) return; // a newer update superseded us
+      // Keep the previous good render (or the source text) and explain why
+      // it isn't updating.
+      const text = mermaidErrorText(e);
+      mermaidErrCache.set(src, text);
+      showMermaidError(pre, text, src, line);
+      continue;
     }
     if (token !== renderToken) return; // a newer update superseded us
     pre.innerHTML = rendered.svg;
@@ -308,6 +337,9 @@ async function render(update) {
   // Bound the cache: editing a diagram churns keys, and SVG strings are large.
   while (mermaidSvgCache.size > 64) {
     mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
+  }
+  while (mermaidErrCache.size > 64) {
+    mermaidErrCache.delete(mermaidErrCache.keys().next().value);
   }
 
   // Restore the viewport by pinning the cursor block to its previous on-screen
