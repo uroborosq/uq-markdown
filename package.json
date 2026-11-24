@@ -13,7 +13,7 @@
     "highlight.js": "latest",
     "markdown-it": "latest",
     "markdown-it-anchor": "latest",
-    "mermaid": "^12.3.0",
+    "mermaid": "latest",
     "ws": "latest"
   },
   "devDependencies": {

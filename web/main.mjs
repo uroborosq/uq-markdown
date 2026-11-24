@@ -70,6 +70,9 @@ const md = new MarkdownIt({
     return `<pre class="hljs"><code class="language-${md.utils.escapeHtml(lang || '')}">${code}</code></pre>`;
   },
 }).use(anchor, { permalink: false });
+// markdown-it 15 (linkify-it 6) stopped linking scheme-less URLs such as
+// `example.com` / `www.example.com` by default; keep the previous behaviour.
+md.linkify.set({ fuzzyLink: true });
 
 // Override the fence renderer so we can:
 //   * emit ```mermaid blocks as <pre class="mermaid"> with the raw graph text

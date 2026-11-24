@@ -62,6 +62,7 @@ var require_constants = __commonJS({
 var require_buffer_util = __commonJS({
   "node_modules/ws/lib/buffer-util.js"(exports, module) {
     "use strict";
+    var { websocketMask, websocketUnmask } = __require("http");
     var { EMPTY_BUFFER } = require_constants();
     var FastBuffer = Buffer[Symbol.species];
     function concat(list, totalLength) {
@@ -116,7 +117,16 @@ var require_buffer_util = __commonJS({
       toBuffer,
       unmask: _unmask
     };
-    if (!process.env.WS_NO_BUFFER_UTIL) {
+    if (websocketMask) {
+      module.exports.mask = function(source, mask, output, offset, length) {
+        if (length < 24) _mask(source, mask, output, offset, length);
+        else websocketMask(source, mask, output, offset, length);
+      };
+      module.exports.unmask = function(buffer, mask) {
+        if (buffer.length < 24) _unmask(buffer, mask);
+        else websocketUnmask(buffer, mask);
+      };
+    } else if (!process.env.WS_NO_BUFFER_UTIL) {
       try {
         const bufferUtil = __require("bufferutil");
         module.exports.mask = function(source, mask, output, offset, length) {
@@ -312,7 +322,7 @@ var require_permessage_deflate = __commonJS({
       acceptAsServer(offers) {
         const opts = this._options;
         const accepted = offers.find((params) => {
-          if (opts.serverNoContextTakeover === false && params.server_no_context_takeover || params.server_max_window_bits && (opts.serverMaxWindowBits === false || typeof opts.serverMaxWindowBits === "number" && opts.serverMaxWindowBits > params.server_max_window_bits) || typeof opts.clientMaxWindowBits === "number" && !params.client_max_window_bits) {
+          if (opts.serverNoContextTakeover === false && params.server_no_context_takeover || params.server_max_window_bits && (opts.serverMaxWindowBits === false || typeof opts.serverMaxWindowBits === "number" && opts.serverMaxWindowBits > params.server_max_window_bits) || typeof opts.clientMaxWindowBits === "number" && (typeof params.client_max_window_bits === "number" ? opts.clientMaxWindowBits > params.client_max_window_bits : !params.client_max_window_bits)) {
             return false;
           }
           return true;
@@ -1179,6 +1189,7 @@ var require_receiver = __commonJS({
             unmask(data, this._mask);
           }
         }
+        this._mask = void 0;
         if (this._opcode > 7) {
           this.controlMessage(data, cb);
           return;
@@ -1511,12 +1522,15 @@ var require_sender = __commonJS({
           target[2] = target[3] = 0;
           target.writeUIntBE(dataLength, 4, 6);
         }
-        if (!options.mask) return [target, data];
+        if (!options.mask) {
+          return dataLength ? [target, data] : [target];
+        }
         target[1] |= 128;
         target[offset - 4] = mask[0];
         target[offset - 3] = mask[1];
         target[offset - 2] = mask[2];
         target[offset - 1] = mask[3];
+        if (!dataLength) return [target];
         if (skipMasking) return [target, data];
         if (merge) {
           applyMask(data, mask, target, offset, dataLength);
@@ -2273,6 +2287,7 @@ var require_websocket = __commonJS({
     var https = __require("https");
     var http2 = __require("http");
     var net = __require("net");
+    var querystring = __require("querystring");
     var tls = __require("tls");
     var { randomBytes, createHash } = __require("crypto");
     var { Duplex, Readable } = __require("stream");
@@ -2330,21 +2345,38 @@ var require_websocket = __commonJS({
           this._isServer = false;
           this._redirects = 0;
           if (protocols === void 0) {
-            protocols = [];
+            if (!options || options.protocols === void 0) {
+              protocols = [];
+            } else if (Array.isArray(options.protocols)) {
+              protocols = options.protocols;
+            } else {
+              protocols = [options.protocols];
+            }
           } else if (!Array.isArray(protocols)) {
             if (typeof protocols === "object" && protocols !== null) {
               options = protocols;
-              protocols = [];
+              if (options.protocols === void 0) {
+                protocols = [];
+              } else if (Array.isArray(options.protocols)) {
+                protocols = options.protocols;
+              } else {
+                protocols = [options.protocols];
+              }
             } else {
               protocols = [protocols];
             }
           }
-          initAsClient(this, address, protocols, options);
+          options = initAsClient(this, address, protocols, options);
         } else {
-          this._autoPong = options.autoPong;
-          this._closeTimeout = options.closeTimeout;
           this._isServer = true;
         }
+        if (options.autoPong) {
+          this._autoPong = true;
+          this._autoPongComplete = () => autoPongComplete(this);
+          this._pendingAutoPongs = 0;
+          this._maxPendingAutoPongs = options.maxPendingAutoPongs | 0;
+        }
+        this._closeTimeout = options.closeTimeout;
       }
       /**
        * For historical reasons, the custom "nodebuffer" type is used by the default
@@ -2531,7 +2563,6 @@ var require_websocket = __commonJS({
           }
           return;
         }
-        this._readyState = _WebSocket.CLOSING;
         this._sender.close(code, data, !this._isServer, (err) => {
           if (err) return;
           this._closeFrameSent = true;
@@ -2539,6 +2570,7 @@ var require_websocket = __commonJS({
             this._socket.end();
           }
         });
+        this._readyState = _WebSocket.CLOSING;
         setCloseTimer(this);
       }
       /**
@@ -2755,6 +2787,7 @@ var require_websocket = __commonJS({
         maxBufferedChunks: 256 * 1024,
         maxFragments: 16 * 1024,
         maxPayload: 100 * 1024 * 1024,
+        maxPendingAutoPongs: 60,
         skipUTF8Validation: false,
         perMessageDeflate: true,
         followRedirects: false,
@@ -2763,14 +2796,13 @@ var require_websocket = __commonJS({
         socketPath: void 0,
         hostname: void 0,
         protocol: void 0,
+        protocols: void 0,
         timeout: void 0,
         method: "GET",
         host: void 0,
         path: void 0,
         port: void 0
       };
-      websocket._autoPong = opts.autoPong;
-      websocket._closeTimeout = opts.closeTimeout;
       if (!protocolVersions.includes(opts.protocolVersion)) {
         throw new RangeError(
           `Unsupported protocol version: ${opts.protocolVersion} (supported versions: ${protocolVersions.join(", ")})`
@@ -2786,10 +2818,9 @@ var require_websocket = __commonJS({
           throw new SyntaxError(`Invalid URL: ${address}`);
         }
       }
-      if (parsedUrl.protocol === "http:") {
-        parsedUrl.protocol = "ws:";
-      } else if (parsedUrl.protocol === "https:") {
-        parsedUrl.protocol = "wss:";
+      if (parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:") {
+        parsedUrl = new URL2(parsedUrl);
+        parsedUrl.protocol = parsedUrl.protocol === "http:" ? "ws:" : "wss:";
       }
       websocket._url = parsedUrl.href;
       const isSecure = parsedUrl.protocol === "wss:";
@@ -2858,12 +2889,19 @@ var require_websocket = __commonJS({
         }
       }
       if (parsedUrl.username || parsedUrl.password) {
-        opts.auth = `${parsedUrl.username}:${parsedUrl.password}`;
+        const username = querystring.unescape(parsedUrl.username);
+        const password = querystring.unescape(parsedUrl.password);
+        opts.auth = `${username}:${password}`;
       }
       if (isIpcUrl) {
-        const parts = opts.path.split(":");
-        opts.socketPath = parts[0];
-        opts.path = parts[1];
+        const i = opts.path.indexOf(":");
+        if (i === -1) {
+          opts.socketPath = opts.path;
+          opts.path = "";
+        } else {
+          opts.socketPath = opts.path.slice(0, i);
+          opts.path = opts.path.slice(i + 1);
+        }
       }
       let req;
       if (opts.followRedirects) {
@@ -3007,6 +3045,7 @@ var require_websocket = __commonJS({
       } else {
         req.end();
       }
+      return opts;
     }
     function emitErrorAndClose(websocket, err) {
       websocket._readyState = WebSocket2.CLOSING;
@@ -3058,8 +3097,13 @@ var require_websocket = __commonJS({
     function receiverOnConclude(code, reason) {
       const websocket = this[kWebSocket];
       websocket._closeFrameReceived = true;
-      websocket._closeMessage = reason;
       websocket._closeCode = code;
+      if (reason.length === 0) {
+        websocket._closeMessage = EMPTY_BUFFER;
+      } else {
+        websocket._closeMessage = Buffer.allocUnsafeSlow(reason.length);
+        websocket._closeMessage.set(reason);
+      }
       if (websocket._socket[kWebSocket] === void 0) return;
       websocket._socket.removeListener("data", socketOnData);
       process.nextTick(resume, websocket._socket);
@@ -3090,8 +3134,18 @@ var require_websocket = __commonJS({
     }
     function receiverOnPing(data) {
       const websocket = this[kWebSocket];
-      if (websocket._autoPong) websocket.pong(data, !this._isServer, NOOP);
+      if (websocket._autoPong && websocket.readyState === WebSocket2.OPEN) {
+        if (websocket._maxPendingAutoPongs > 0 && websocket._pendingAutoPongs >= websocket._maxPendingAutoPongs) {
+          websocket.terminate();
+        } else {
+          websocket._pendingAutoPongs++;
+          websocket.pong(data, !this._isServer, websocket._autoPongComplete);
+        }
+      }
       websocket.emit("ping", data);
+    }
+    function autoPongComplete(websocket) {
+      websocket._pendingAutoPongs--;
     }
     function receiverOnPong(data) {
       this[kWebSocket].emit("pong", data);
@@ -3346,6 +3400,8 @@ var require_websocket_server = __commonJS({
        *     fragments
        * @param {Number} [options.maxPayload=104857600] The maximum allowed message
        *     size
+       * @param {Number} [options.maxPendingAutoPongs=60] The maximum number of
+       *     pending automatic pongs
        * @param {Boolean} [options.noServer=false] Enable no server mode
        * @param {String} [options.path] Accept only connections matching this path
        * @param {(Boolean|Object)} [options.perMessageDeflate=false] Enable/disable
@@ -3368,6 +3424,7 @@ var require_websocket_server = __commonJS({
           maxBufferedChunks: 256 * 1024,
           maxFragments: 16 * 1024,
           maxPayload: 100 * 1024 * 1024,
+          maxPendingAutoPongs: 60,
           skipUTF8Validation: false,
           perMessageDeflate: false,
           handleProtocols: null,
