@@ -49,6 +49,11 @@ function initMermaid(theme) {
     theme: currentTheme,
     flowchart: { defaultRenderer: 'elk' },
     ...userMermaidConfig,
+    // Without this, a failed render leaves mermaid's temp container
+    // (<div id="d<id>"> with the "Syntax error" bomb) attached to <body>, and
+    // since every attempt uses a fresh id they pile up below the content.
+    // We handle errors ourselves (keep the last good render), so suppress.
+    suppressErrorRendering: true,
   });
 }
 initMermaid('default');
@@ -284,9 +289,12 @@ async function render(update) {
   }
   for (const { pre, src, line } of toRender) {
     let rendered;
+    const id = 'mmd-' + ++mermaidSeq;
     try {
-      rendered = await mermaid.render('mmd-' + ++mermaidSeq, src);
+      rendered = await mermaid.render(id, src);
     } catch (e) {
+      // Belt and braces: drop any temp container mermaid left in <body>.
+      document.getElementById('d' + id)?.remove();
       console.error('[uq-markdown] mermaid render error', e);
       continue; // leave the previous good render (or source text) in place
     }
