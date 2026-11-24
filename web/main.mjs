@@ -1,16 +1,15 @@
 // uq-markdown preview frontend.
 //
 // Renders markdown to HTML with markdown-it, then renders every ```mermaid
-// block using the LATEST mermaid together with the ELK layout engine. ELK is
-// the whole point of this plugin, so it is registered up front and used as the
-// default layout for all diagrams (individual diagrams may still override it via
-// their own frontmatter).
+// block using the LATEST mermaid with the ELK layout engine. Since mermaid 12,
+// ELK ships inside mermaid itself (no separate @mermaid-js/layout-elk needed);
+// we still pin it as the default layout explicitly (individual diagrams may
+// override it via their own frontmatter).
 
 import MarkdownIt from 'markdown-it';
 import anchor from 'markdown-it-anchor';
 import hljs from 'highlight.js/lib/common';
 import mermaid from 'mermaid';
-import elkLayouts from '@mermaid-js/layout-elk';
 
 import {
   pickTargetIndex,
@@ -20,8 +19,6 @@ import {
 } from './scroll.mjs';
 
 // --- mermaid + ELK ----------------------------------------------------------
-mermaid.registerLayoutLoaders(elkLayouts);
-
 let currentTheme = 'default';
 // User-supplied mermaid config (from the plugin's `mermaid_config` file). Its
 // keys override the defaults below; if it sets `theme`, that wins over the
@@ -47,7 +44,6 @@ function initMermaid(theme) {
     securityLevel: 'loose',
     layout: 'elk', // default everything to ELK; frontmatter can override.
     theme: currentTheme,
-    flowchart: { defaultRenderer: 'elk' },
     ...userMermaidConfig,
     // Without this, a failed render leaves mermaid's temp container
     // (<div id="d<id>"> with the "Syntax error" bomb) attached to <body>, and

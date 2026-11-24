@@ -5,7 +5,7 @@ with images and — the whole point — **mermaid diagrams rendered by the lates
 mermaid + the ELK layout engine**.
 
 Unlike existing preview plugins, the mermaid bundle is built here from npm, so
-you get `mermaid@latest` and `@mermaid-js/layout-elk` under your control, with
+you get `mermaid@latest` (which bundles ELK since v12) under your control, with
 ELK as the default layout for every diagram.
 
 ## How it works

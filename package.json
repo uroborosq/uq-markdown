@@ -10,11 +10,10 @@
     "test": "node --test 'web/**/*.test.mjs'"
   },
   "dependencies": {
-    "@mermaid-js/layout-elk": "latest",
     "highlight.js": "latest",
     "markdown-it": "latest",
     "markdown-it-anchor": "latest",
-    "mermaid": "latest",
+    "mermaid": "^12.3.0",
     "ws": "latest"
   },
   "devDependencies": {
