@@ -359,7 +359,7 @@ async function render(update) {
   }
 }
 
-// Follow the Neovim cursor, but only when its block is off-screen. The gate is
+// Follow the Neovim cursor, but only when its block is not fully on screen. The gate is
 // what keeps typing calm: the old code forced the line to a third of the
 // viewport on *every* keystroke, so the preview never stopped moving. Once the
 // scroll only happens on a real jump, animating it is free — a jump you can see
@@ -367,8 +367,8 @@ async function render(update) {
 function scrollToLine(line) {
   const target = elementForLine(line);
   if (!target) return;
-  const rectTop = target.getBoundingClientRect().top;
-  const y = computeScrollTarget(rectTop, window.scrollY, window.innerHeight);
+  const rect = target.getBoundingClientRect();
+  const y = computeScrollTarget(rect.top, rect.height, window.scrollY, window.innerHeight);
   if (y === null) return; // already comfortably visible — leave the viewport alone
   smoothScrollTo(Math.max(0, y));
 }

@@ -28,23 +28,39 @@ test('pickTargetIndex: exact match selects that block', () => {
   assert.equal(pickTargetIndex([1, 4, 9], 9), 2);
 });
 
-test('computeScrollTarget: comfortably-visible block returns null (no scroll)', () => {
-  // innerHeight 1000, band 0.1 -> visible dead-zone is [100, 900].
-  assert.equal(computeScrollTarget(500, 2000, 1000), null);
+// computeScrollTarget(rectTop, rectHeight, scrollY, innerHeight, band)
+// innerHeight 1000, band 0.1 -> comfortable zone is [100, 900], 800px tall.
+
+test('computeScrollTarget: block fully inside the comfortable zone returns null', () => {
+  assert.equal(computeScrollTarget(500, 100, 2000, 1000), null);
 });
 
-test('computeScrollTarget: block above the viewport scrolls it to one-third', () => {
-  // rectTop -50 is above the top dead-zone -> scroll so it lands at innerHeight/3.
-  assert.equal(computeScrollTarget(-50, 2000, 1000), 2000 + -50 - 1000 / 3);
+test('computeScrollTarget: zone edges count as inside', () => {
+  assert.equal(computeScrollTarget(100, 800, 2000, 1000), null);
 });
 
-test('computeScrollTarget: block below the viewport scrolls it to one-third', () => {
-  assert.equal(computeScrollTarget(950, 2000, 1000), 2000 + 950 - 1000 / 3);
+test('computeScrollTarget: block above the viewport is centred', () => {
+  // centre of the block (-50 + 100/2 = 0) moves to the viewport centre (500).
+  assert.equal(computeScrollTarget(-50, 100, 2000, 1000), 2000 + 0 - 500);
 });
 
-test('computeScrollTarget: block exactly on the band edge is still considered visible', () => {
-  assert.equal(computeScrollTarget(100, 2000, 1000), null);
-  assert.equal(computeScrollTarget(900, 2000, 1000), null);
+test('computeScrollTarget: block below the viewport is centred', () => {
+  assert.equal(computeScrollTarget(950, 100, 2000, 1000), 2000 + 1000 - 500);
+});
+
+test('computeScrollTarget: block whose top is visible but bottom is cut off is centred', () => {
+  // a 400px diagram starting at 800 spills past 900 -> bring it to the middle.
+  assert.equal(computeScrollTarget(800, 400, 2000, 1000), 2000 + 1000 - 500);
+});
+
+test('computeScrollTarget: block taller than the zone with a visible top stays put', () => {
+  // long code block you are typing inside: never yank it around.
+  assert.equal(computeScrollTarget(300, 2000, 2000, 1000), null);
+});
+
+test('computeScrollTarget: block taller than the zone with an off-screen top aligns its top', () => {
+  assert.equal(computeScrollTarget(-500, 2000, 2000, 1000), 2000 - 500 - 100);
+  assert.equal(computeScrollTarget(950, 2000, 2000, 1000), 2000 + 950 - 100);
 });
 
 test('keyScrollDelta: j/k scroll down/up by one step', () => {

@@ -14,18 +14,29 @@ export function pickTargetIndex(lines, line) {
   return idx;
 }
 
-// Decide where to scroll so the target block is visible. `rectTop` is the
-// block's viewport-relative top (px), `scrollY` the current scroll offset,
-// `innerHeight` the viewport height. Returns null when the block is already
-// within the comfortable band [band, 1-band] of the viewport — the key to a
-// jitter-free editing experience: typing on an on-screen line moves nothing.
-// Otherwise returns the absolute scrollY that places the block a third of the
-// way down.
-export function computeScrollTarget(rectTop, scrollY, innerHeight, band = 0.1) {
+// Decide where to scroll so the target block is visible. `rectTop` and
+// `rectHeight` are the block's viewport-relative top and its height (px),
+// `scrollY` the current scroll offset, `innerHeight` the viewport height.
+// The comfortable zone is [band, 1-band] of the viewport. Returns null when no
+// scroll is needed — the key to a jitter-free editing experience: typing on an
+// on-screen block moves nothing.
+//
+// - A block that fits in the zone must sit entirely inside it; otherwise it is
+//   centred, the way `zz` would in Neovim (so a diagram half cut off at the
+//   bottom comes into full view).
+// - A block taller than the zone can't be fully shown. It stays put while its
+//   top is inside the zone (you're editing in it), else its top is aligned to
+//   the zone's top edge to show as much of it as possible.
+export function computeScrollTarget(rectTop, rectHeight, scrollY, innerHeight, band = 0.1) {
   const top = innerHeight * band;
   const bottom = innerHeight * (1 - band);
+  const rectBottom = rectTop + rectHeight;
+  if (rectHeight <= bottom - top) {
+    if (rectTop >= top && rectBottom <= bottom) return null;
+    return scrollY + rectTop + rectHeight / 2 - innerHeight / 2;
+  }
   if (rectTop >= top && rectTop <= bottom) return null;
-  return scrollY + rectTop - innerHeight / 3;
+  return scrollY + rectTop - top;
 }
 
 // Vim-style navigation keys -> a scroll delta, or null when the key is not one
